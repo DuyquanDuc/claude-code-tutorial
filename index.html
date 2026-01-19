@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日本語 Study Tracker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #ffffff;
+      color: #1f2328;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #656d76;
+      margin-bottom: 30px;
+    }
+
+    .commit-form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 40px;
+    }
+
+    .commit-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      color: #1f2328;
+      font-size: 14px;
+    }
+
+    .commit-input:focus {
+      outline: none;
+      border-color: #58a6ff;
+    }
+
+    .commit-btn {
+      padding: 10px 20px;
+      background: #238636;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .commit-btn:hover {
+      background: #2ea043;
+    }
+
+    .stats {
+      display: flex;
+      gap: 30px;
+      margin-bottom: 20px;
+    }
+
+    .stat {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .stat-label {
+      color: #656d76;
+      font-size: 14px;
+    }
+
+    .heatmap-container {
+      background: #ffffff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 20px;
+      overflow-x: auto;
+    }
+
+    .heatmap-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .heatmap-title {
+      font-size: 14px;
+      color: #656d76;
+    }
+
+    .months {
+      display: flex;
+      font-size: 11px;
+      color: #656d76;
+      margin-bottom: 5px;
+      margin-left: 30px;
+      position: relative;
+      height: 15px;
+    }
+
+    .month {
+      position: absolute;
+      font-size: 11px;
+    }
+
+    .heatmap {
+      display: flex;
+      gap: 3px;
+    }
+
+    .days-label {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-right: 5px;
+      font-size: 11px;
+      color: #656d76;
+    }
+
+    .day-label {
+      height: 12px;
+      line-height: 12px;
+    }
+
+    .weeks {
+      display: flex;
+      gap: 3px;
+    }
+
+    .week {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .day {
+      width: 12px;
+      height: 12px;
+      background: #ebedf0;
+      border-radius: 2px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .day:hover {
+      outline: 1px solid #1b1f23;
+    }
+
+    .day[data-level="0"] { background: #ebedf0; }
+    .day[data-level="1"] { background: #9be9a8; }
+    .day[data-level="2"] { background: #40c463; }
+    .day[data-level="3"] { background: #30a14e; }
+    .day[data-level="4"] { background: #216e39; }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 15px;
+      justify-content: flex-end;
+      font-size: 11px;
+      color: #656d76;
+    }
+
+    .legend-box {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+
+    .tooltip {
+      position: fixed;
+      background: #24292f;
+      color: #ffffff;
+      border: 1px solid #1b1f23;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 100;
+      display: none;
+    }
+
+    .recent-commits {
+      margin-top: 30px;
+    }
+
+    .recent-title {
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+
+    .commit-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .commit-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+    }
+
+    .commit-dot {
+      width: 8px;
+      height: 8px;
+      background: #30a14e;
+      border-radius: 50%;
+    }
+
+    .commit-message {
+      flex: 1;
+    }
+
+    .commit-date {
+      color: #656d76;
+      font-size: 12px;
+    }
+
+    .commit-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .commit-actions button {
+      background: none;
+      border: none;
+      color: #656d76;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .commit-actions button:hover {
+      background: #d0d7de;
+      color: #1f2328;
+    }
+
+    .commit-actions .delete-btn:hover {
+      background: #ffebe9;
+      color: #cf222e;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: #656d76;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>日本語 Study Tracker</h1>
+    <p class="subtitle">Track your Japanese learning consistency</p>
+
+    <form class="commit-form" id="commitForm">
+      <input
+        type="text"
+        class="commit-input"
+        id="studyInput"
+        placeholder="What did you study today? (e.g., 漢字 - learned 20 new kanji)"
+        required
+      >
+      <button type="submit" class="commit-btn">Commit</button>
+    </form>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-value" id="totalCommits">0</span>
+        <span class="stat-label">total commits</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="currentStreak">0</span>
+        <span class="stat-label">day streak</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="thisYear">0</span>
+        <span class="stat-label">this year</span>
+      </div>
+    </div>
+
+    <div class="heatmap-container">
+      <div class="heatmap-header">
+        <span class="heatmap-title" id="yearLabel">2024</span>
+      </div>
+      <div class="months" id="months"></div>
+      <div class="heatmap">
+        <div class="days-label">
+          <div class="day-label">Sun</div>
+          <div class="day-label">Mon</div>
+          <div class="day-label">Tue</div>
+          <div class="day-label">Wed</div>
+          <div class="day-label">Thu</div>
+          <div class="day-label">Fri</div>
+          <div class="day-label">Sat</div>
+        </div>
+        <div class="weeks" id="weeks"></div>
+      </div>
+      <div class="legend">
+        <span>Less</span>
+        <div class="legend-box" data-level="0"></div>
+        <div class="legend-box" data-level="1"></div>
+        <div class="legend-box" data-level="2"></div>
+        <div class="legend-box" data-level="3"></div>
+        <div class="legend-box" data-level="4"></div>
+        <span>More</span>
+      </div>
+    </div>
+
+    <div class="recent-commits">
+      <h2 class="recent-title">Recent Activity</h2>
+      <div class="commit-list" id="commitList"></div>
+    </div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    const STORAGE_KEY = 'japanese-study-commits';
+
+    function getCommits() {
+      const data = localStorage.getItem(STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    }
+
+    function saveCommits(commits) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(commits));
+    }
+
+    function formatDate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function getDateKey(date) {
+      return formatDate(date);
+    }
+
+    function addCommit(message) {
+      const commits = getCommits();
+      commits.push({
+        id: Date.now(),
+        message,
+        date: new Date().toISOString()
+      });
+      saveCommits(commits);
+      render();
+    }
+
+    function deleteCommit(id) {
+      if (confirm('Delete this commit?')) {
+        const commits = getCommits().filter(c => c.id !== id);
+        saveCommits(commits);
+        render();
+      }
+    }
+
+    function editCommit(id) {
+      const commits = getCommits();
+      const commit = commits.find(c => c.id === id);
+      if (!commit) return;
+
+      const newMessage = prompt('Edit commit message:', commit.message);
+      if (newMessage !== null && newMessage.trim()) {
+        commit.message = newMessage.trim();
+        saveCommits(commits);
+        render();
+      }
+    }
+
+    function getCommitsByDate() {
+      const commits = getCommits();
+      const byDate = {};
+      commits.forEach(commit => {
+        const date = getDateKey(new Date(commit.date));
+        byDate[date] = (byDate[date] || 0) + 1;
+      });
+      return byDate;
+    }
+
+    function getLevel(count) {
+      if (count === 0) return 0;
+      if (count <= 1) return 1;
+      if (count <= 3) return 2;
+      if (count <= 5) return 3;
+      return 4;
+    }
+
+    function calculateStreak() {
+      const byDate = getCommitsByDate();
+      let streak = 0;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      let checkDate = new Date(today);
+
+      // Check if today has commits
+      if (!byDate[getDateKey(checkDate)]) {
+        // Check yesterday
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+
+      while (byDate[getDateKey(checkDate)]) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+
+      return streak;
+    }
+
+    function renderHeatmap() {
+      const weeksContainer = document.getElementById('weeks');
+      const monthsContainer = document.getElementById('months');
+      const byDate = getCommitsByDate();
+      const today = new Date();
+
+      // Fixed year: 2026
+      const year = 2026;
+      document.getElementById('yearLabel').textContent = year;
+
+      // Start from January 1st, 2026
+      const startDate = new Date(year, 0, 1); // Jan 1, 2026
+      const endDate = new Date(year, 11, 31); // Dec 31, 2026
+
+      // Find the Sunday before or on Jan 1st
+      const firstSunday = new Date(startDate);
+      while (firstSunday.getDay() !== 0) {
+        firstSunday.setDate(firstSunday.getDate() - 1);
+      }
+
+      weeksContainer.innerHTML = '';
+      monthsContainer.innerHTML = '';
+
+      let currentDate = new Date(firstSunday);
+      let currentMonth = -1;
+      const monthPositions = []; // Track which week each month starts
+
+      // Generate weeks for the full year
+      let week = 0;
+      while (currentDate <= endDate || currentDate.getDay() !== 0) {
+        const weekDiv = document.createElement('div');
+        weekDiv.className = 'week';
+
+        for (let day = 0; day < 7; day++) {
+          const dayDiv = document.createElement('div');
+          dayDiv.className = 'day';
+
+          const isInYear = currentDate.getFullYear() === year;
+          const isPastToday = currentDate > today;
+
+          if (isInYear) {
+            const dateKey = getDateKey(currentDate);
+            const count = byDate[dateKey] || 0;
+            dayDiv.setAttribute('data-level', isPastToday ? 0 : getLevel(count));
+            dayDiv.setAttribute('data-date', dateKey);
+            dayDiv.setAttribute('data-count', count);
+            if (isPastToday) {
+              dayDiv.style.opacity = '0.3';
+            }
+
+            // Track when month changes
+            if (day === 0 && currentDate.getMonth() !== currentMonth) {
+              currentMonth = currentDate.getMonth();
+              monthPositions.push({ month: currentMonth, week: week });
+            }
+          } else {
+            dayDiv.style.visibility = 'hidden';
+          }
+
+          weekDiv.appendChild(dayDiv);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        weeksContainer.appendChild(weekDiv);
+        week++;
+
+        // Safety limit
+        if (week > 54) break;
+      }
+
+      // Render month labels at correct positions
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      monthPositions.forEach(({ month, week }) => {
+        const monthSpan = document.createElement('span');
+        monthSpan.className = 'month';
+        monthSpan.textContent = monthNames[month];
+        monthSpan.style.left = `${week * 15}px`;
+        monthsContainer.appendChild(monthSpan);
+      });
+    }
+
+    function renderRecentCommits() {
+      const commits = getCommits().slice(-10).reverse();
+      const container = document.getElementById('commitList');
+
+      if (commits.length === 0) {
+        container.innerHTML = '<div class="empty-state">No commits yet. Start studying!</div>';
+        return;
+      }
+
+      container.innerHTML = commits.map(commit => {
+        const date = new Date(commit.date);
+        const formatted = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        return `
+          <div class="commit-item">
+            <div class="commit-dot"></div>
+            <span class="commit-message">${escapeHtml(commit.message)}</span>
+            <span class="commit-date">${formatted}</span>
+            <div class="commit-actions">
+              <button onclick="editCommit(${commit.id})">Edit</button>
+              <button class="delete-btn" onclick="deleteCommit(${commit.id})">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function updateStats() {
+      const commits = getCommits();
+      const thisYear = commits.filter(c =>
+        new Date(c.date).getFullYear() === new Date().getFullYear()
+      ).length;
+
+      document.getElementById('totalCommits').textContent = commits.length;
+      document.getElementById('currentStreak').textContent = calculateStreak();
+      document.getElementById('thisYear').textContent = thisYear;
+    }
+
+    function render() {
+      renderHeatmap();
+      renderRecentCommits();
+      updateStats();
+    }
+
+    // Event listeners
+    document.getElementById('commitForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('studyInput');
+      if (input.value.trim()) {
+        addCommit(input.value.trim());
+        input.value = '';
+      }
+    });
+
+    // Tooltip
+    const tooltip = document.getElementById('tooltip');
+    document.getElementById('weeks').addEventListener('mouseover', (e) => {
+      if (e.target.classList.contains('day') && e.target.dataset.date) {
+        const count = e.target.dataset.count;
+        const date = new Date(e.target.dataset.date + 'T00:00:00');
+        const formatted = date.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        tooltip.textContent = `${count} commit${count !== '1' ? 's' : ''} on ${formatted}`;
+        tooltip.style.display = 'block';
+      }
+    });
+
+    document.getElementById('weeks').addEventListener('mousemove', (e) => {
+      tooltip.style.left = e.pageX + 10 + 'px';
+      tooltip.style.top = e.pageY + 10 + 'px';
+    });
+
+    document.getElementById('weeks').addEventListener('mouseout', (e) => {
+      if (e.target.classList.contains('day')) {
+        tooltip.style.display = 'none';
+      }
+    });
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
