@@ -24,9 +24,54 @@
       margin: 0 auto;
     }
 
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
     h1 {
       font-size: 24px;
-      margin-bottom: 8px;
+    }
+
+    .auth-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .auth-section img {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+    }
+
+    .auth-section span {
+      font-size: 13px;
+      color: #656d76;
+    }
+
+    .auth-btn {
+      padding: 6px 14px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #f6f8fa;
+      color: #1f2328;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .auth-btn:hover {
+      background: #ebedf0;
+    }
+
+    .sync-status {
+      font-size: 11px;
+      color: #656d76;
+      margin-bottom: 4px;
+      text-align: right;
     }
 
     .subtitle {
@@ -397,7 +442,13 @@
 </head>
 <body>
   <div class="container">
-    <h1>日本語 Study Tracker</h1>
+    <div class="header-row">
+      <h1>日本語 Study Tracker</h1>
+      <div class="auth-section" id="authSection">
+        <button class="auth-btn" id="signInBtn" onclick="signIn()">Sign in with Google</button>
+      </div>
+    </div>
+    <div class="sync-status" id="syncStatus"></div>
     <p class="subtitle">Track your Japanese learning consistency</p>
 
     <div class="daily-checklist" id="dailyChecklist">
@@ -474,7 +525,102 @@
 
   <div class="tooltip" id="tooltip"></div>
 
+  <!-- Firebase SDK (compat mode for simplicity with no build system) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
   <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAzliBn84UHnGegKVITvEiSnWyV22tCSkg",
+      authDomain: "consistency-tracker-1db76.firebaseapp.com",
+      projectId: "consistency-tracker-1db76",
+      storageBucket: "consistency-tracker-1db76.firebasestorage.app",
+      messagingSenderId: "410530324715",
+      appId: "1:410530324715:web:5a24542be4b4607f729eae",
+      measurementId: "G-VCWC8P358D"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    let currentUser = null;
+
+    // ── Auth ──
+    function signIn() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(err => {
+        alert('Sign-in failed: ' + err.message);
+      });
+    }
+
+    function signOut() {
+      auth.signOut();
+    }
+
+    auth.onAuthStateChanged(async (user) => {
+      currentUser = user;
+      updateAuthUI();
+      if (user) {
+        await loadFromFirestore();
+      }
+      render();
+    });
+
+    function updateAuthUI() {
+      const section = document.getElementById('authSection');
+      const syncStatus = document.getElementById('syncStatus');
+      if (currentUser) {
+        section.innerHTML = `
+          <img src="${currentUser.photoURL || ''}" alt="" referrerpolicy="no-referrer">
+          <span>${escapeHtml(currentUser.displayName || currentUser.email)}</span>
+          <button class="auth-btn" onclick="signOut()">Sign out</button>
+        `;
+        syncStatus.textContent = 'Synced to cloud';
+      } else {
+        section.innerHTML = `<button class="auth-btn" onclick="signIn()">Sign in with Google</button>`;
+        syncStatus.textContent = 'Local only — sign in to sync across devices';
+      }
+    }
+
+    // ── Firestore helpers ──
+    function userDoc() {
+      return db.collection('users').doc(currentUser.uid);
+    }
+
+    async function loadFromFirestore() {
+      try {
+        const doc = await userDoc().get();
+        if (doc.exists) {
+          const data = doc.data();
+          if (data.commits) localStorage.setItem(STORAGE_KEY, JSON.stringify(data.commits));
+          if (data.activities) localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(data.activities));
+          if (data.checked) localStorage.setItem(CHECKED_KEY, JSON.stringify(data.checked));
+        } else {
+          // First sign-in: push local data to Firestore
+          await syncToFirestore();
+        }
+      } catch (err) {
+        console.error('Firestore load error:', err);
+      }
+    }
+
+    async function syncToFirestore() {
+      if (!currentUser) return;
+      try {
+        await userDoc().set({
+          commits: getCommits(),
+          activities: getActivities(),
+          checked: JSON.parse(localStorage.getItem(CHECKED_KEY) || '{}')
+        }, { merge: true });
+      } catch (err) {
+        console.error('Firestore sync error:', err);
+      }
+    }
+
+    // ── Local storage keys ──
     const STORAGE_KEY = 'japanese-study-commits';
     const ACTIVITIES_KEY = 'study-tracker-activities';
     const CHECKED_KEY = 'study-tracker-checked';
@@ -495,6 +641,7 @@
 
     function saveActivities(activities) {
       localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(activities));
+      syncToFirestore();
     }
 
     function getCheckedToday() {
@@ -510,6 +657,7 @@
       const today = formatDate(new Date());
       checked[today] = checkedList;
       localStorage.setItem(CHECKED_KEY, JSON.stringify(checked));
+      syncToFirestore();
     }
 
     function toggleActivity(activityName) {
@@ -517,10 +665,10 @@
       const idx = checked.indexOf(activityName);
       if (idx === -1) {
         checked.push(activityName);
+        setCheckedToday(checked);
         addCommit(`✅ ${activityName}`);
       } else {
         checked.splice(idx, 1);
-        // Remove the most recent commit for this activity today
         const commits = getCommits();
         const today = formatDate(new Date());
         const toRemove = commits.findIndex(c => {
@@ -531,9 +679,9 @@
           commits.splice(toRemove, 1);
           saveCommits(commits);
         }
+        setCheckedToday(checked);
+        render();
       }
-      setCheckedToday(checked);
-      render();
     }
 
     function addActivity() {
@@ -588,6 +736,7 @@
 
     function saveCommits(commits) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(commits));
+      syncToFirestore();
     }
 
     function formatDate(date) {
@@ -659,9 +808,7 @@
 
       let checkDate = new Date(today);
 
-      // Check if today has commits
       if (!byDate[getDateKey(checkDate)]) {
-        // Check yesterday
         checkDate.setDate(checkDate.getDate() - 1);
       }
 
@@ -679,15 +826,12 @@
       const byDate = getCommitsByDate();
       const today = new Date();
 
-      // Fixed year: 2026
       const year = 2026;
       document.getElementById('yearLabel').textContent = year;
 
-      // Start from January 1st, 2026
-      const startDate = new Date(year, 0, 1); // Jan 1, 2026
-      const endDate = new Date(year, 11, 31); // Dec 31, 2026
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year, 11, 31);
 
-      // Find the Sunday before or on Jan 1st
       const firstSunday = new Date(startDate);
       while (firstSunday.getDay() !== 0) {
         firstSunday.setDate(firstSunday.getDate() - 1);
@@ -698,9 +842,8 @@
 
       let currentDate = new Date(firstSunday);
       let currentMonth = -1;
-      const monthPositions = []; // Track which week each month starts
+      const monthPositions = [];
 
-      // Generate weeks for the full year
       let week = 0;
       while (currentDate <= endDate || currentDate.getDay() !== 0) {
         const weekDiv = document.createElement('div');
@@ -723,7 +866,6 @@
               dayDiv.style.opacity = '0.3';
             }
 
-            // Track when month changes
             if (day === 0 && currentDate.getMonth() !== currentMonth) {
               currentMonth = currentDate.getMonth();
               monthPositions.push({ month: currentMonth, week: week });
@@ -739,11 +881,9 @@
         weeksContainer.appendChild(weekDiv);
         week++;
 
-        // Safety limit
         if (week > 54) break;
       }
 
-      // Render month labels at correct positions
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       monthPositions.forEach(({ month, week }) => {
