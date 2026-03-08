@@ -162,6 +162,7 @@
       width: 12px;
       height: 12px;
       background: #ebedf0;
+      border: 1px solid #1f2328;
       border-radius: 2px;
       cursor: pointer;
       position: relative;
@@ -190,8 +191,15 @@
     .legend-box {
       width: 12px;
       height: 12px;
+      border: 1px solid #1f2328;
       border-radius: 2px;
     }
+
+    .legend-box[data-level="0"] { background: #ebedf0; }
+    .legend-box[data-level="1"] { background: #9be9a8; }
+    .legend-box[data-level="2"] { background: #40c463; }
+    .legend-box[data-level="3"] { background: #30a14e; }
+    .legend-box[data-level="4"] { background: #216e39; }
 
     .tooltip {
       position: fixed;
@@ -277,12 +285,132 @@
       color: #656d76;
       padding: 40px;
     }
+
+    .daily-checklist {
+      margin-bottom: 30px;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 16px 20px;
+    }
+
+    .checklist-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .checklist-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .checklist-date {
+      font-size: 13px;
+      color: #656d76;
+    }
+
+    .checklist-items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .checklist-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+    }
+
+    .checklist-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #238636;
+      cursor: pointer;
+    }
+
+    .checklist-item label {
+      cursor: pointer;
+      flex: 1;
+    }
+
+    .checklist-item .remove-activity-btn {
+      background: none;
+      border: none;
+      color: #cf222e;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .checklist-item:hover .remove-activity-btn {
+      opacity: 1;
+    }
+
+    .checklist-item .remove-activity-btn:hover {
+      background: #ffebe9;
+    }
+
+    .add-activity-form {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #d0d7de;
+    }
+
+    .add-activity-form input {
+      flex: 1;
+      padding: 6px 10px;
+      background: #ffffff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #1f2328;
+    }
+
+    .add-activity-form input:focus {
+      outline: none;
+      border-color: #58a6ff;
+    }
+
+    .add-activity-form button {
+      padding: 6px 12px;
+      background: #238636;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .add-activity-form button:hover {
+      background: #2ea043;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>日本語 Study Tracker</h1>
     <p class="subtitle">Track your Japanese learning consistency</p>
+
+    <div class="daily-checklist" id="dailyChecklist">
+      <div class="checklist-header">
+        <span class="checklist-title">Today's Activities</span>
+        <span class="checklist-date" id="checklistDate"></span>
+      </div>
+      <div class="checklist-items" id="checklistItems"></div>
+      <div class="add-activity-form">
+        <input type="text" id="newActivityInput" placeholder="Add a new activity...">
+        <button onclick="addActivity()">+ Add</button>
+      </div>
+    </div>
 
     <form class="commit-form" id="commitForm">
       <input
@@ -348,6 +476,110 @@
 
   <script>
     const STORAGE_KEY = 'japanese-study-commits';
+    const ACTIVITIES_KEY = 'study-tracker-activities';
+    const CHECKED_KEY = 'study-tracker-checked';
+
+    const DEFAULT_ACTIVITIES = [
+      'Japanese 5 mins study',
+      'Reading book 5 mins',
+      '10 sit ups',
+      '10 push ups',
+      '5 minutes 会話練習',
+      '1 commit'
+    ];
+
+    function getActivities() {
+      const data = localStorage.getItem(ACTIVITIES_KEY);
+      return data ? JSON.parse(data) : DEFAULT_ACTIVITIES;
+    }
+
+    function saveActivities(activities) {
+      localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(activities));
+    }
+
+    function getCheckedToday() {
+      const data = localStorage.getItem(CHECKED_KEY);
+      const checked = data ? JSON.parse(data) : {};
+      const today = formatDate(new Date());
+      return checked[today] || [];
+    }
+
+    function setCheckedToday(checkedList) {
+      const data = localStorage.getItem(CHECKED_KEY);
+      const checked = data ? JSON.parse(data) : {};
+      const today = formatDate(new Date());
+      checked[today] = checkedList;
+      localStorage.setItem(CHECKED_KEY, JSON.stringify(checked));
+    }
+
+    function toggleActivity(activityName) {
+      const checked = getCheckedToday();
+      const idx = checked.indexOf(activityName);
+      if (idx === -1) {
+        checked.push(activityName);
+        addCommit(`✅ ${activityName}`);
+      } else {
+        checked.splice(idx, 1);
+        // Remove the most recent commit for this activity today
+        const commits = getCommits();
+        const today = formatDate(new Date());
+        const toRemove = commits.findIndex(c => {
+          const cDate = formatDate(new Date(c.date));
+          return cDate === today && c.message === `✅ ${activityName}`;
+        });
+        if (toRemove !== -1) {
+          commits.splice(toRemove, 1);
+          saveCommits(commits);
+        }
+      }
+      setCheckedToday(checked);
+      render();
+    }
+
+    function addActivity() {
+      const input = document.getElementById('newActivityInput');
+      const name = input.value.trim();
+      if (!name) return;
+      const activities = getActivities();
+      if (activities.includes(name)) return;
+      activities.push(name);
+      saveActivities(activities);
+      input.value = '';
+      renderChecklist();
+    }
+
+    function removeActivity(name) {
+      if (!confirm(`Remove "${name}" from activities?`)) return;
+      const activities = getActivities().filter(a => a !== name);
+      saveActivities(activities);
+      renderChecklist();
+    }
+
+    function renderChecklist() {
+      const container = document.getElementById('checklistItems');
+      const activities = getActivities();
+      const checked = getCheckedToday();
+      const today = new Date();
+      document.getElementById('checklistDate').textContent = today.toLocaleDateString('en-US', {
+        weekday: 'long', month: 'short', day: 'numeric'
+      });
+
+      container.innerHTML = activities.map((activity, i) => {
+        const isChecked = checked.includes(activity);
+        const id = `activity-${i}`;
+        return `
+          <div class="checklist-item">
+            <input type="checkbox" id="${id}" ${isChecked ? 'checked' : ''} onchange="toggleActivity('${activity.replace(/'/g, "\\'")}')">
+            <label for="${id}">${escapeHtml(activity)}</label>
+            <button class="remove-activity-btn" onclick="removeActivity('${activity.replace(/'/g, "\\'")}')">×</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('newActivityInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addActivity(); }
+    });
 
     function getCommits() {
       const data = localStorage.getItem(STORAGE_KEY);
@@ -575,6 +807,7 @@
       renderHeatmap();
       renderRecentCommits();
       updateStats();
+      renderChecklist();
     }
 
     // Event listeners
