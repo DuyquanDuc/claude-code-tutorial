@@ -433,6 +433,39 @@
       flex: 1;
     }
 
+    .habit-streak {
+      font-size: 11px;
+      color: #656d76;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .habit-streak .streak-bar {
+      width: 60px;
+      height: 6px;
+      background: #ebedf0;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .habit-streak .streak-fill {
+      height: 100%;
+      background: #30a14e;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    .habit-streak.complete {
+      color: #238636;
+      font-weight: 600;
+    }
+
+    .habit-streak.complete .streak-fill {
+      background: #238636;
+    }
+
     .checklist-item.done label {
       text-decoration: line-through;
       color: #656d76;
@@ -875,6 +908,34 @@
       renderChecklist();
     }
 
+    const HABIT_DAYS = 66;
+
+    function getHabitStreak(activityName) {
+      const data = localStorage.getItem(CHECKED_KEY);
+      const allChecked = data ? JSON.parse(data) : {};
+      let streak = 0;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let checkDate = new Date(today);
+
+      // If not checked today, start from yesterday
+      const todayKey = formatDate(checkDate);
+      if (!(allChecked[todayKey] && allChecked[todayKey].includes(activityName))) {
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+
+      while (true) {
+        const key = formatDate(checkDate);
+        if (allChecked[key] && allChecked[key].includes(activityName)) {
+          streak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+      return streak;
+    }
+
     function renderChecklist() {
       const habitContainer = document.getElementById('habitItems');
       const taskContainer = document.getElementById('taskItems');
@@ -891,10 +952,17 @@
       habitContainer.innerHTML = activities.map((activity, i) => {
         const isChecked = checked.includes(activity);
         const id = `habit-${i}`;
+        const streak = getHabitStreak(activity);
+        const pct = Math.min(100, Math.round((streak / HABIT_DAYS) * 100));
+        const isComplete = streak >= HABIT_DAYS;
         return `
           <div class="checklist-item">
             <input type="checkbox" id="${id}" ${isChecked ? 'checked' : ''} onchange="toggleHabit('${activity.replace(/'/g, "\\'")}')">
             <label for="${id}">${escapeHtml(activity)}</label>
+            <span class="habit-streak${isComplete ? ' complete' : ''}">
+              ${isComplete ? '✓ ' : ''}${streak}/${HABIT_DAYS}d
+              <span class="streak-bar"><span class="streak-fill" style="width:${pct}%"></span></span>
+            </span>
             <button class="remove-activity-btn" onclick="removeHabit('${activity.replace(/'/g, "\\'")}')">×</button>
           </div>
         `;
