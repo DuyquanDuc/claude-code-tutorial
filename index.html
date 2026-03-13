@@ -283,6 +283,17 @@
       pointer-events: none;
       z-index: 100;
       display: none;
+      white-space: nowrap;
+    }
+
+    .tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: #24292f;
     }
 
     .recent-commits {
@@ -382,6 +393,21 @@
       color: #656d76;
     }
 
+    .section-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #656d76;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .section-label:not(:first-child) {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #d0d7de;
+    }
+
     .checklist-items {
       display: flex;
       flex-direction: column;
@@ -407,6 +433,11 @@
       flex: 1;
     }
 
+    .checklist-item.done label {
+      text-decoration: line-through;
+      color: #656d76;
+    }
+
     .checklist-item .remove-activity-btn {
       background: none;
       border: none;
@@ -424,6 +455,39 @@
     }
 
     .checklist-item .remove-activity-btn:hover {
+      background: #ffebe9;
+    }
+
+    .done-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #d0d7de;
+    }
+
+    .done-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .done-header .section-label {
+      margin: 0;
+      padding: 0;
+      border: none;
+    }
+
+    .clear-done-btn {
+      background: none;
+      border: none;
+      color: #cf222e;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .clear-done-btn:hover {
       background: #ffebe9;
     }
 
@@ -464,6 +528,25 @@
     .add-activity-form button:hover {
       background: #2ea043;
     }
+
+    .load-more-btn {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      color: #656d76;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .load-more-btn:hover {
+      background: #ebedf0;
+      color: #1f2328;
+    }
   </style>
 </head>
 <body>
@@ -481,11 +564,19 @@
         <span class="checklist-title">Today's Activities</span>
         <span class="checklist-date" id="checklistDate"></span>
       </div>
-      <div class="checklist-items" id="checklistItems"></div>
+      <div class="section-label">Recurring Habits</div>
+      <div class="checklist-items" id="habitItems"></div>
       <div class="add-activity-form">
-        <input type="text" id="newActivityInput" placeholder="Add a new activity...">
-        <button onclick="addActivity()">+ Add</button>
+        <input type="text" id="newHabitInput" placeholder="Add a recurring habit...">
+        <button onclick="addHabit()">+ Habit</button>
       </div>
+      <div class="section-label">One-time Tasks</div>
+      <div class="checklist-items" id="taskItems"></div>
+      <div class="add-activity-form">
+        <input type="text" id="newTaskInput" placeholder="Add a one-time task...">
+        <button onclick="addTask()">+ Task</button>
+      </div>
+      <div id="doneSection"></div>
     </div>
 
     <form class="commit-form" id="commitForm">
@@ -620,6 +711,7 @@
           if (data.commits) localStorage.setItem(STORAGE_KEY, JSON.stringify(data.commits));
           if (data.activities) localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(data.activities));
           if (data.checked) localStorage.setItem(CHECKED_KEY, JSON.stringify(data.checked));
+          if (data.tasks) localStorage.setItem(TASKS_KEY, JSON.stringify(data.tasks));
         } else {
           // First sign-in: push local data to Firestore
           await syncToFirestore();
@@ -635,7 +727,8 @@
         await userDoc().set({
           commits: getCommits(),
           activities: getActivities(),
-          checked: JSON.parse(localStorage.getItem(CHECKED_KEY) || '{}')
+          checked: JSON.parse(localStorage.getItem(CHECKED_KEY) || '{}'),
+          tasks: JSON.parse(localStorage.getItem(TASKS_KEY) || '[]')
         }, { merge: true });
       } catch (err) {
         console.error('Firestore sync error:', err);
@@ -646,6 +739,7 @@
     const STORAGE_KEY = 'japanese-study-commits';
     const ACTIVITIES_KEY = 'study-tracker-activities';
     const CHECKED_KEY = 'study-tracker-checked';
+    const TASKS_KEY = 'study-tracker-tasks';
 
     const DEFAULT_ACTIVITIES = [
       'Japanese 5 mins study',
@@ -656,6 +750,7 @@
       '1 commit'
     ];
 
+    // ── Habits (recurring) ──
     function getActivities() {
       const data = localStorage.getItem(ACTIVITIES_KEY);
       return data ? JSON.parse(data) : DEFAULT_ACTIVITIES;
@@ -682,7 +777,7 @@
       syncToFirestore();
     }
 
-    function toggleActivity(activityName) {
+    function toggleHabit(activityName) {
       const checked = getCheckedToday();
       const idx = checked.indexOf(activityName);
       if (idx === -1) {
@@ -706,8 +801,8 @@
       }
     }
 
-    function addActivity() {
-      const input = document.getElementById('newActivityInput');
+    function addHabit() {
+      const input = document.getElementById('newHabitInput');
       const name = input.value.trim();
       if (!name) return;
       const activities = getActivities();
@@ -718,37 +813,137 @@
       renderChecklist();
     }
 
-    function removeActivity(name) {
-      if (!confirm(`Remove "${name}" from activities?`)) return;
+    function removeHabit(name) {
+      if (!confirm(`Remove "${name}" from habits?`)) return;
       const activities = getActivities().filter(a => a !== name);
       saveActivities(activities);
       renderChecklist();
     }
 
+    // ── Tasks (one-time) ──
+    function getTasks() {
+      const data = localStorage.getItem(TASKS_KEY);
+      return data ? JSON.parse(data) : [];
+    }
+
+    function saveTasks(tasks) {
+      localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+      syncToFirestore();
+    }
+
+    function toggleTask(taskId) {
+      const tasks = getTasks();
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      task.done = !task.done;
+      if (task.done) {
+        task.doneDate = new Date().toISOString();
+        addCommit(`✅ ${task.name}`);
+      } else {
+        const commits = getCommits();
+        const toRemove = commits.findIndex(c => c.message === `✅ ${task.name}`);
+        if (toRemove !== -1) {
+          commits.splice(toRemove, 1);
+          saveCommits(commits);
+        }
+        delete task.doneDate;
+      }
+      saveTasks(tasks);
+      renderChecklist();
+    }
+
+    function addTask() {
+      const input = document.getElementById('newTaskInput');
+      const name = input.value.trim();
+      if (!name) return;
+      const tasks = getTasks();
+      tasks.push({ id: Date.now(), name, done: false });
+      saveTasks(tasks);
+      input.value = '';
+      renderChecklist();
+    }
+
+    function removeTask(taskId) {
+      const tasks = getTasks().filter(t => t.id !== taskId);
+      saveTasks(tasks);
+      renderChecklist();
+    }
+
+    function clearDoneTasks() {
+      const tasks = getTasks().filter(t => !t.done);
+      saveTasks(tasks);
+      renderChecklist();
+    }
+
     function renderChecklist() {
-      const container = document.getElementById('checklistItems');
+      const habitContainer = document.getElementById('habitItems');
+      const taskContainer = document.getElementById('taskItems');
+      const doneSection = document.getElementById('doneSection');
       const activities = getActivities();
       const checked = getCheckedToday();
+      const tasks = getTasks();
       const today = new Date();
       document.getElementById('checklistDate').textContent = today.toLocaleDateString('en-US', {
         weekday: 'long', month: 'short', day: 'numeric'
       });
 
-      container.innerHTML = activities.map((activity, i) => {
+      // Render recurring habits
+      habitContainer.innerHTML = activities.map((activity, i) => {
         const isChecked = checked.includes(activity);
-        const id = `activity-${i}`;
+        const id = `habit-${i}`;
         return `
           <div class="checklist-item">
-            <input type="checkbox" id="${id}" ${isChecked ? 'checked' : ''} onchange="toggleActivity('${activity.replace(/'/g, "\\'")}')">
+            <input type="checkbox" id="${id}" ${isChecked ? 'checked' : ''} onchange="toggleHabit('${activity.replace(/'/g, "\\'")}')">
             <label for="${id}">${escapeHtml(activity)}</label>
-            <button class="remove-activity-btn" onclick="removeActivity('${activity.replace(/'/g, "\\'")}')">×</button>
+            <button class="remove-activity-btn" onclick="removeHabit('${activity.replace(/'/g, "\\'")}')">×</button>
           </div>
         `;
       }).join('');
+
+      // Render pending one-time tasks
+      const pendingTasks = tasks.filter(t => !t.done);
+      const doneTasks = tasks.filter(t => t.done);
+
+      taskContainer.innerHTML = pendingTasks.length === 0
+        ? '<div style="color:#656d76;font-size:13px;padding:4px 0;">No pending tasks</div>'
+        : pendingTasks.map(task => `
+          <div class="checklist-item">
+            <input type="checkbox" id="task-${task.id}" onchange="toggleTask(${task.id})">
+            <label for="task-${task.id}">${escapeHtml(task.name)}</label>
+            <button class="remove-activity-btn" onclick="removeTask(${task.id})">×</button>
+          </div>
+        `).join('');
+
+      // Render done section
+      if (doneTasks.length > 0) {
+        doneSection.innerHTML = `
+          <div class="done-section">
+            <div class="done-header">
+              <span class="section-label">Done</span>
+              <button class="clear-done-btn" onclick="clearDoneTasks()">Clear all</button>
+            </div>
+            <div class="checklist-items">
+              ${doneTasks.map(task => `
+                <div class="checklist-item done">
+                  <input type="checkbox" id="task-${task.id}" checked onchange="toggleTask(${task.id})">
+                  <label for="task-${task.id}">${escapeHtml(task.name)}</label>
+                  <button class="remove-activity-btn" onclick="removeTask(${task.id})">×</button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        doneSection.innerHTML = '';
+      }
     }
 
-    document.getElementById('newActivityInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); addActivity(); }
+    document.getElementById('newHabitInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addHabit(); }
+    });
+
+    document.getElementById('newTaskInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addTask(); }
     });
 
     function getCommits() {
@@ -917,16 +1112,20 @@
       });
     }
 
+    let recentCommitsShown = 3;
+
     function renderRecentCommits() {
-      const commits = getCommits().slice(-10).reverse();
+      const allCommits = getCommits().slice().reverse();
       const container = document.getElementById('commitList');
 
-      if (commits.length === 0) {
+      if (allCommits.length === 0) {
         container.innerHTML = '<div class="empty-state">No commits yet. Start studying!</div>';
         return;
       }
 
-      container.innerHTML = commits.map(commit => {
+      const visible = allCommits.slice(0, recentCommitsShown);
+
+      container.innerHTML = visible.map(commit => {
         const date = new Date(commit.date);
         const formatted = date.toLocaleDateString('en-US', {
           month: 'short',
@@ -946,6 +1145,15 @@
           </div>
         `;
       }).join('');
+
+      if (allCommits.length > recentCommitsShown) {
+        container.innerHTML += `<button class="load-more-btn" onclick="loadMoreCommits()">Load more (${allCommits.length - recentCommitsShown} remaining)</button>`;
+      }
+    }
+
+    function loadMoreCommits() {
+      recentCommitsShown += 5;
+      renderRecentCommits();
     }
 
     function escapeHtml(text) {
@@ -996,12 +1204,11 @@
         });
         tooltip.textContent = `${count} commit${count !== '1' ? 's' : ''} on ${formatted}`;
         tooltip.style.display = 'block';
-      }
-    });
 
-    document.getElementById('weeks').addEventListener('mousemove', (e) => {
-      tooltip.style.left = e.pageX + 10 + 'px';
-      tooltip.style.top = e.pageY + 10 + 'px';
+        const rect = e.target.getBoundingClientRect();
+        tooltip.style.left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2) + 'px';
+        tooltip.style.top = rect.top - tooltip.offsetHeight - 6 + 'px';
+      }
     });
 
     document.getElementById('weeks').addEventListener('mouseout', (e) => {
