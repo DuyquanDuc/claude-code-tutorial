@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>日本語 Study Tracker</title>
+  <title>Consistency Tracker</title>
   <style>
     * {
       margin: 0;
@@ -102,7 +102,52 @@
 
     .subtitle {
       color: #656d76;
-      margin-bottom: 30px;
+      margin-bottom: 20px;
+    }
+
+    .rules-board {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+    }
+
+    .rules-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e6edf3;
+      margin-bottom: 10px;
+      letter-spacing: 0.3px;
+    }
+
+    .rules-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .rule-item {
+      font-size: 13px;
+      color: #8b949e;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .rule-number {
+      background: #238636;
+      color: #fff;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
     }
 
     .commit-form {
@@ -433,6 +478,17 @@
       flex: 1;
     }
 
+    .habit-time {
+      font-size: 11px;
+      color: #8b949e;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 1px 5px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
     .habit-streak {
       font-size: 11px;
       color: #656d76;
@@ -592,6 +648,15 @@
     </div>
     <p class="subtitle">Track your daily consistency</p>
 
+    <div class="rules-board">
+      <div class="rules-title">3 Rules of Consistency</div>
+      <div class="rules-list">
+        <div class="rule-item"><span class="rule-number">1</span> Set the bar low — make it impossible to fail.</div>
+        <div class="rule-item"><span class="rule-number">2</span> Schedule it — know exactly when you'll do it.</div>
+        <div class="rule-item"><span class="rule-number">3</span> No exceptions — the streak is sacred.</div>
+      </div>
+    </div>
+
     <div class="daily-checklist" id="dailyChecklist">
       <div class="checklist-header">
         <span class="checklist-title">Today's Activities</span>
@@ -601,6 +666,7 @@
       <div class="checklist-items" id="habitItems"></div>
       <div class="add-activity-form">
         <input type="text" id="newHabitInput" placeholder="Add a recurring habit...">
+        <input type="time" id="newHabitTime" style="background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:4px 6px;font-size:13px;">
         <button onclick="addHabit()">+ Habit</button>
       </div>
       <div class="section-label">One-time Tasks</div>
@@ -745,6 +811,7 @@
           if (data.activities) localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(data.activities));
           if (data.checked) localStorage.setItem(CHECKED_KEY, JSON.stringify(data.checked));
           if (data.tasks) localStorage.setItem(TASKS_KEY, JSON.stringify(data.tasks));
+          if (data.habitTimes) localStorage.setItem(HABIT_TIMES_KEY, JSON.stringify(data.habitTimes));
         } else {
           // First sign-in: push local data to Firestore
           await syncToFirestore();
@@ -761,7 +828,8 @@
           commits: getCommits(),
           activities: getActivities(),
           checked: JSON.parse(localStorage.getItem(CHECKED_KEY) || '{}'),
-          tasks: JSON.parse(localStorage.getItem(TASKS_KEY) || '[]')
+          tasks: JSON.parse(localStorage.getItem(TASKS_KEY) || '[]'),
+          habitTimes: getHabitTimes()
         }, { merge: true });
       } catch (err) {
         console.error('Firestore sync error:', err);
@@ -773,6 +841,7 @@
     const ACTIVITIES_KEY = 'study-tracker-activities';
     const CHECKED_KEY = 'study-tracker-checked';
     const TASKS_KEY = 'study-tracker-tasks';
+    const HABIT_TIMES_KEY = 'study-tracker-habit-times';
 
     const DEFAULT_ACTIVITIES = [
       'Japanese 5 mins study',
@@ -782,6 +851,33 @@
       '5 minutes 会話練習',
       '1 commit'
     ];
+
+    const DEFAULT_HABIT_TIMES = {
+      'Japanese 5 mins study': '08:00',
+      '5 minutes 会話練習': '08:15',
+      'Reading book 5 mins': '12:00',
+      '10 sit ups': '18:30',
+      '10 push ups': '18:30',
+      '1 commit': '19:00'
+    };
+
+    function getHabitTimes() {
+      const data = localStorage.getItem(HABIT_TIMES_KEY);
+      return data ? JSON.parse(data) : DEFAULT_HABIT_TIMES;
+    }
+
+    function saveHabitTimes(times) {
+      localStorage.setItem(HABIT_TIMES_KEY, JSON.stringify(times));
+      syncToFirestore();
+    }
+
+    function formatTime12h(time24) {
+      if (!time24) return '';
+      const [h, m] = time24.split(':').map(Number);
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${h12}:${m.toString().padStart(2, '0')} ${suffix}`;
+    }
 
     // ── Habits (recurring) ──
     function getActivities() {
@@ -836,13 +932,20 @@
 
     function addHabit() {
       const input = document.getElementById('newHabitInput');
+      const timeInput = document.getElementById('newHabitTime');
       const name = input.value.trim();
       if (!name) return;
       const activities = getActivities();
       if (activities.includes(name)) return;
       activities.push(name);
       saveActivities(activities);
+      if (timeInput.value) {
+        const times = getHabitTimes();
+        times[name] = timeInput.value;
+        saveHabitTimes(times);
+      }
       input.value = '';
+      timeInput.value = '';
       renderChecklist();
     }
 
@@ -850,6 +953,9 @@
       if (!confirm(`Remove "${name}" from habits?`)) return;
       const activities = getActivities().filter(a => a !== name);
       saveActivities(activities);
+      const times = getHabitTimes();
+      delete times[name];
+      saveHabitTimes(times);
       renderChecklist();
     }
 
@@ -948,20 +1054,27 @@
         weekday: 'long', month: 'short', day: 'numeric'
       });
 
-      // Render recurring habits
-      habitContainer.innerHTML = activities.map((activity, i) => {
+      // Render recurring habits (sorted by time)
+      const habitTimes = getHabitTimes();
+      const sortedActivities = [...activities].sort((a, b) => {
+        const ta = habitTimes[a] || '99:99';
+        const tb = habitTimes[b] || '99:99';
+        return ta.localeCompare(tb);
+      });
+      habitContainer.innerHTML = sortedActivities.map((activity, i) => {
         const isChecked = checked.includes(activity);
         const id = `habit-${i}`;
         const streak = getHabitStreak(activity);
         const pct = Math.min(100, Math.round((streak / HABIT_DAYS) * 100));
         const isComplete = streak >= HABIT_DAYS;
+        const timeStr = habitTimes[activity] ? formatTime12h(habitTimes[activity]) : '';
         return `
           <div class="checklist-item">
             <input type="checkbox" id="${id}" ${isChecked ? 'checked' : ''} onchange="toggleHabit('${activity.replace(/'/g, "\\'")}')">
+            ${timeStr ? `<span class="habit-time">${timeStr}</span>` : ''}
             <label for="${id}">${escapeHtml(activity)}</label>
             <span class="habit-streak${isComplete ? ' complete' : ''}">
               ${isComplete ? '✓ ' : ''}${streak}/${HABIT_DAYS}d
-              <span class="streak-bar"><span class="streak-fill" style="width:${pct}%"></span></span>
             </span>
             <button class="remove-activity-btn" onclick="removeHabit('${activity.replace(/'/g, "\\'")}')">×</button>
           </div>
