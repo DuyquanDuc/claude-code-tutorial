@@ -68,6 +68,14 @@
     }
 
     @media (max-width: 600px) {
+      body {
+        padding: 20px 12px;
+      }
+
+      h1 {
+        font-size: 20px;
+      }
+
       .header-row {
         flex-direction: column;
         align-items: flex-start;
@@ -91,12 +99,117 @@
         margin-right: 0 !important;
       }
 
+      .rules-board {
+        padding: 12px 14px;
+      }
+
+      .rule-item {
+        font-size: 12px;
+      }
+
+      .daily-checklist {
+        padding: 14px;
+      }
+
+      .checklist-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+      }
+
+      .checklist-item {
+        font-size: 13px;
+        flex-wrap: wrap;
+      }
+
+      .checklist-item .remove-activity-btn {
+        opacity: 1;
+      }
+
+      .habit-streak .streak-bar {
+        width: 40px;
+      }
+
+      .add-activity-form {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .add-activity-form input[type="text"] {
+        flex: 1 1 100%;
+      }
+
+      .commit-form {
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+
+      .commit-btn {
+        width: 100%;
+      }
+
+      .stats {
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .stat-value {
+        font-size: 18px;
+      }
+
+      .stat-label {
+        font-size: 13px;
+      }
+
       .heatmap-container {
-        padding: 20px 12px;
+        padding: 16px 10px;
       }
 
       .weeks {
         padding-right: 8px;
+      }
+
+      .months {
+        margin-left: 22px;
+      }
+
+      .days-label {
+        font-size: 10px;
+        margin-right: 3px;
+      }
+
+      .legend {
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .commit-item {
+        flex-wrap: wrap;
+        padding: 10px;
+        font-size: 13px;
+      }
+
+      .commit-message {
+        flex: 1 1 100%;
+        order: 1;
+      }
+
+      .commit-date {
+        order: 2;
+      }
+
+      .commit-actions {
+        order: 3;
+        margin-left: auto;
+      }
+
+      .tooltip {
+        font-size: 11px;
+        padding: 6px 8px;
+        max-width: 80vw;
+        white-space: normal;
       }
     }
 
