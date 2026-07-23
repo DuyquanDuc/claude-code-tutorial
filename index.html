@@ -875,6 +875,8 @@
     const db = firebase.firestore();
 
     let currentUser = null;
+    let unsubscribe = null;      // Firestore realtime listener
+    let applyingRemote = false;  // true while writing a remote snapshot into local
 
     // ── Auth ──
     function signIn() {
@@ -891,8 +893,10 @@
     auth.onAuthStateChanged(async (user) => {
       currentUser = user;
       updateAuthUI();
+      if (unsubscribe) { unsubscribe(); unsubscribe = null; }
       if (user) {
-        await loadFromFirestore();
+        await reconcile();  // union local + cloud so no device loses entries
+        subscribe();        // live-sync changes made on other devices
       }
       render();
     });
@@ -915,35 +919,83 @@
       return db.collection('users').doc(currentUser.uid);
     }
 
-    async function loadFromFirestore() {
+    // Snapshot of everything we persist, read from localStorage.
+    function localState() {
+      return {
+        commits: getCommits(),
+        activities: getActivities(),
+        checked: JSON.parse(localStorage.getItem(CHECKED_KEY) || '{}'),
+        tasks: getTasks(),
+        habitTimes: getHabitTimes()
+      };
+    }
+
+    // Write a full state object into localStorage.
+    function applyState(data) {
+      if (data.commits)    localStorage.setItem(STORAGE_KEY, JSON.stringify(data.commits));
+      if (data.activities) localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(data.activities));
+      if (data.checked)    localStorage.setItem(CHECKED_KEY, JSON.stringify(data.checked));
+      if (data.tasks)      localStorage.setItem(TASKS_KEY, JSON.stringify(data.tasks));
+      if (data.habitTimes) localStorage.setItem(HABIT_TIMES_KEY, JSON.stringify(data.habitTimes));
+    }
+
+    // Union two states so a write from one device never clobbers the other's entries.
+    function mergeState(local, remote) {
+      local = local || {}; remote = remote || {};
+      const unionById = (a, b) => {
+        const m = new Map();
+        (b || []).forEach(x => m.set(x.id, x));
+        (a || []).forEach(x => m.set(x.id, x)); // this device wins on id conflict
+        return [...m.values()];
+      };
+      const unionArr = (a, b) => [...new Set([...(b || []), ...(a || [])])];
+      const mergeChecked = (a, b) => {
+        const out = {};
+        new Set([...Object.keys(a || {}), ...Object.keys(b || {})]).forEach(d => {
+          out[d] = [...new Set([...((a || {})[d] || []), ...((b || {})[d] || [])])];
+        });
+        return out;
+      };
+      return {
+        commits: unionById(local.commits, remote.commits),
+        tasks: unionById(local.tasks, remote.tasks),
+        activities: unionArr(local.activities, remote.activities),
+        checked: mergeChecked(local.checked, remote.checked),
+        habitTimes: Object.assign({}, remote.habitTimes || {}, local.habitTimes || {})
+      };
+    }
+
+    // On sign-in: union this device's local data with the cloud so nothing is lost, then push it.
+    async function reconcile() {
+      if (!currentUser) return;
       try {
         const doc = await userDoc().get();
-        if (doc.exists) {
-          const data = doc.data();
-          if (data.commits) localStorage.setItem(STORAGE_KEY, JSON.stringify(data.commits));
-          if (data.activities) localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(data.activities));
-          if (data.checked) localStorage.setItem(CHECKED_KEY, JSON.stringify(data.checked));
-          if (data.tasks) localStorage.setItem(TASKS_KEY, JSON.stringify(data.tasks));
-          if (data.habitTimes) localStorage.setItem(HABIT_TIMES_KEY, JSON.stringify(data.habitTimes));
-        } else {
-          // First sign-in: push local data to Firestore
-          await syncToFirestore();
-        }
+        const merged = mergeState(localState(), doc.exists ? doc.data() : {});
+        applyState(merged);
+        await userDoc().set(merged);
       } catch (err) {
-        console.error('Firestore load error:', err);
+        console.error('Firestore reconcile error:', err);
       }
     }
 
-    async function syncToFirestore() {
+    // Realtime: apply changes made on other devices as they happen.
+    function subscribe() {
       if (!currentUser) return;
+      unsubscribe = userDoc().onSnapshot((doc) => {
+        if (!doc.exists || doc.metadata.hasPendingWrites) return; // ignore our own optimistic writes
+        applyingRemote = true;
+        applyState(doc.data());
+        applyingRemote = false;
+        render();
+      }, (err) => console.error('Firestore listen error:', err));
+    }
+
+    // Called after every local change. Writes the full current state; the live listener
+    // keeps localState() current, so this reflects other devices too (and propagates deletes).
+    async function syncToFirestore() {
+      if (!currentUser || applyingRemote) return;
       try {
-        await userDoc().set({
-          commits: getCommits(),
-          activities: getActivities(),
-          checked: JSON.parse(localStorage.getItem(CHECKED_KEY) || '{}'),
-          tasks: JSON.parse(localStorage.getItem(TASKS_KEY) || '[]'),
-          habitTimes: getHabitTimes()
-        }, { merge: true });
+        await userDoc().set(localState());
       } catch (err) {
         console.error('Firestore sync error:', err);
       }
